@@ -1,17 +1,17 @@
 // == UserScript ==
-// @name         One Million Chessboards - WASD Controls (Strict Mode Fix + Delay Tweak)
+// @name         One Million Chessboards - WASD Controls (Shift Multi-Move)
 // @namespace    http://tampermonkey.net/
-// @version      0.4
-// @description  Attempt to add basic WASD controls for selected black pieces on One Million Chessboards (Strict Mode compatible, increased delay)
+// @version      0.5
+// @description  WASD for single moves, Shift+WASD for multi-square moves (furthest valid) for black pieces.
 // @match        https://chess.eieio.games/*
 // @grant        none
-// @author       Gemini 2.5 Pro (one-shot)
+// @author       Your AI Assistant
 // ==/UserScript ==
 
 (function() {
     'use strict';
 
-    console.log("Initializing WASD Chess Controls for Black Pieces (v0.4)...");
+    console.log("Initializing WASD Chess Controls for Black Pieces (v0.5 - Shift Multi-Move)...");
 
     let selectedPieceElement = null;
     let lastClickedUserPieceElement = null;
@@ -19,59 +19,58 @@
     const SELECT_KEY = 'q'; // Press 'Q' to select the last clicked piece for WASD control
     const USER_PIECE_SELECTOR = 'button.sc-dVBluf img.chess-piece[src*="/black-processed/"]';
     const TARGET_SQUARE_SELECTOR = 'button.sc-fLDLck'; // Selector for the highlighted valid move squares
-    const POST_MOVE_DELAY_MS = 300; // Increased delay (milliseconds)
+    const POST_MOVE_DELAY_MS = 300; // Delay after move for re-click
+    const MAX_MULTI_MOVE_DISTANCE = 8; // Max squares to check for multi-move
 
     // --- Utility Functions ---
     function getElementPosition(element) {
+        // ... (keep the previous getElementPosition function)
         if (!element || !element.style) {
-             console.warn("getElementPosition: Invalid element provided.");
+             // console.warn("getElementPosition: Invalid element provided."); // Reduce noise
              return null;
         }
         const transform = element.style.transform;
         if (!transform || !transform.includes('translate')) {
-            // Don't log error here, might be transient during updates
-            // console.error("Could not find transform style for:", element);
             return null;
         }
         const match = transform.match(/translate\(\s*(-?\d+(\.\d+)?)px,\s*(-?\d+(\.\d+)?)px\s*\)/);
         if (match && match.length >= 4) {
             return { x: parseFloat(match[1]), y: parseFloat(match[3]) };
         } else {
-            console.error("Could not parse translate style:", transform);
+            // console.error("Could not parse translate style:", transform); // Reduce noise
             return null;
         }
     }
 
      function findTargetSquareElement(targetX, targetY) {
+        // ... (keep the previous findTargetSquareElement function)
         const targetSquares = document.querySelectorAll(TARGET_SQUARE_SELECTOR);
         for (const square of targetSquares) {
             try {
                 const style = getComputedStyle(square);
                 const xStr = style.getPropertyValue('--x').trim().replace('px', '');
                 const yStr = style.getPropertyValue('--y').trim().replace('px', '');
-                // Use parseInt which is safer if the value isn't purely numeric for some reason
                 const sx = parseInt(xStr, 10);
                 const sy = parseInt(yStr, 10);
 
-                // Check if parsing resulted in valid numbers
                  if (!isNaN(sx) && !isNaN(sy) && Math.abs(sx - targetX) < 1 && Math.abs(sy - targetY) < 1) {
                     return square;
                 }
             } catch (e) {
-                console.warn("Error parsing target square position", square, e);
+                // console.warn("Error parsing target square position", square, e); // Reduce noise
             }
         }
         return null;
     }
 
     function updateSelection(newSelectionElement) {
+        // ... (keep the previous updateSelection function)
         if (selectedPieceElement) {
             selectedPieceElement.style.outline = 'none';
             selectedPieceElement.style.filter = '';
         }
         selectedPieceElement = newSelectionElement;
         if (selectedPieceElement) {
-            // Ensure element still exists before styling
              if (!document.contains(selectedPieceElement)) {
                  console.warn("Attempted to select an element no longer in the DOM. Deselecting.");
                  selectedPieceElement = null;
@@ -82,7 +81,6 @@
             selectedPieceElement.style.outlineOffset = '2px';
             selectedPieceElement.style.filter = 'drop-shadow(0 0 5px limegreen)';
             console.log(`Selected piece ID: ${selectedPieceElement.dataset.id}`, selectedPieceElement);
-            // Click the selected piece to ensure its valid moves are shown
             selectedPieceElement.click();
         } else {
             console.log("Piece deselected.");
@@ -92,6 +90,7 @@
     // --- Event Handler Functions ---
 
     function handleUserClick(event) {
+        // ... (keep the previous handleUserClick function)
         const target = event.target;
         if (target.matches(USER_PIECE_SELECTOR)) {
             const buttonElement = target.closest('button.sc-dVBluf');
@@ -104,16 +103,17 @@
 
     function handleKeyDown(event) {
         const key = event.key.toLowerCase();
+        const isShiftPressed = event.shiftKey;
 
+        // --- Selection Logic ---
         if (key === SELECT_KEY) {
             event.preventDefault();
             if (lastClickedUserPieceElement) {
-                 // Ensure the last clicked element is still valid before selecting
                  if (document.contains(lastClickedUserPieceElement)) {
                      updateSelection(lastClickedUserPieceElement);
                  } else {
                      console.log("The previously clicked piece is no longer available. Please click it again.");
-                     lastClickedUserPieceElement = null; // Clear invalid reference
+                     lastClickedUserPieceElement = null;
                  }
             } else {
                 console.log("No user piece clicked recently to select.");
@@ -121,11 +121,12 @@
             return;
         }
 
+        // --- Movement Logic (WASD) ---
         if (['w', 'a', 's', 'd'].includes(key)) {
             if (!selectedPieceElement || !document.contains(selectedPieceElement)) {
-                 if (selectedPieceElement) { // If reference exists but element detached
+                 if (selectedPieceElement) {
                       console.log("Selected piece element is no longer valid. Deselecting.");
-                      updateSelection(null); // Auto-deselect
+                      updateSelection(null);
                  } else {
                     console.log(`No piece selected. Press '${SELECT_KEY}' after clicking your piece.`);
                  }
@@ -136,76 +137,105 @@
 
             const currentPos = getElementPosition(selectedPieceElement);
             if (!currentPos) {
-                // It's possible the style is temporarily removed during animation. Don't treat as fatal error yet.
                 console.warn("Could not get current position of selected piece (maybe animating?). Move might fail.");
-                // Allow proceeding, the findTargetSquareElement might still work if based on older state? Risky.
-                 // Alternative: return here to prevent likely failure
-                 // return;
+                return; // Exit if we don't know where the piece is
             }
 
-            // Calculate target based on *last known* position OR default if unknown
-            const sourceX = currentPos ? currentPos.x : 0;
-            const sourceY = currentPos ? currentPos.y : 0;
-            let targetX = sourceX;
+            const sourceX = currentPos.x;
+            const sourceY = currentPos.y;
+            let targetSquare = null; // The element we will eventually click
+            let targetX = sourceX;   // Coordinates of the target square
             let targetY = sourceY;
 
+            // Determine direction vector
+            let deltaX = 0;
+            let deltaY = 0;
             switch (key) {
-                case 'w': targetY -= PIECE_SIZE; break; // Up
-                case 'a': targetX -= PIECE_SIZE; break; // Left
-                case 's': targetY += PIECE_SIZE; break; // Down
-                case 'd': targetX += PIECE_SIZE; break; // Right
+                case 'w': deltaY = -1; break;
+                case 'a': deltaX = -1; break;
+                case 's': deltaY = 1;  break;
+                case 'd': deltaX = 1;  break;
             }
 
-             if (!currentPos) { // Log if we guessed position
-                 console.warn(`Moving based on assumed 0,0 start or previous target due to missing position data. Target: (${targetX}, ${targetY})`)
-             } else {
-                console.log(`Attempting move via ${key.toUpperCase()}: from (${sourceX}, ${sourceY}) to (${targetX}, ${targetY})`);
-             }
+            // --- Choose Target Based on Shift ---
+            if (isShiftPressed) {
+                // Multi-move: Find the furthest valid square in the chosen direction
+                console.log(`Attempting MULTI-move via Shift+${key.toUpperCase()}: from (${sourceX}, ${sourceY})`);
+                let furthestFoundSquare = null;
+                let furthestDistance = 0;
 
+                for (let i = 1; i <= MAX_MULTI_MOVE_DISTANCE; i++) {
+                    const checkX = sourceX + i * deltaX * PIECE_SIZE;
+                    const checkY = sourceY + i * deltaY * PIECE_SIZE;
+                    const potentialTarget = findTargetSquareElement(checkX, checkY);
 
-            const targetSquare = findTargetSquareElement(targetX, targetY);
+                    if (potentialTarget) {
+                        // Found a valid square at this distance
+                        furthestFoundSquare = potentialTarget;
+                        furthestDistance = i; // Store distance if needed for logging/debugging
+                        targetX = checkX;     // Update target coordinates
+                        targetY = checkY;
+                        // Continue checking further squares in the loop
+                    } else {
+                        // If we find an invalid square after finding a valid one,
+                        // it means we hit the end of the line (or an obstacle the game didn't highlight past).
+                        // Stop checking further in this direction.
+                        if (furthestFoundSquare) break;
+                    }
+                }
 
+                if (furthestFoundSquare) {
+                    console.log(` -> Found furthest target at distance ${furthestDistance} (${targetX}, ${targetY})`);
+                    targetSquare = furthestFoundSquare;
+                } else {
+                    console.log(" -> No valid multi-move target found in that direction.");
+                }
+
+            } else {
+                // Single-move: Calculate target one step away
+                targetX = sourceX + deltaX * PIECE_SIZE;
+                targetY = sourceY + deltaY * PIECE_SIZE;
+                console.log(`Attempting single move via ${key.toUpperCase()}: from (${sourceX}, ${sourceY}) to (${targetX}, ${targetY})`);
+                targetSquare = findTargetSquareElement(targetX, targetY);
+            }
+
+            // --- Execute Move if Target Found ---
             if (targetSquare) {
                 console.log("Found valid target square, clicking:", targetSquare);
                 targetSquare.click();
-                // Keep the reference, assume the game updates the element in place or replaces it predictably
-                lastClickedUserPieceElement = selectedPieceElement;
+                lastClickedUserPieceElement = selectedPieceElement; // Keep track
 
-                // Re-click the *selected* piece after a delay to show new targets
-                // Use a copy of the reference in case selectedPieceElement changes before timeout
+                // Re-click the *selected* piece after a delay
                 const elementToReclick = selectedPieceElement;
-                const expectedTargetX = targetX; // Capture target coords for the check
+                const expectedTargetX = targetX; // Use the final target coords
                 const expectedTargetY = targetY;
 
                 setTimeout(() => {
-                    // 1. Check if the element reference we stored is still valid and in the DOM
                     if (elementToReclick && elementToReclick.parentElement) {
-                         // 2. Get its CURRENT position *now*
                          const newPos = getElementPosition(elementToReclick);
                          if (newPos) {
-                             // 3. Check if it matches where we *intended* to move it
                              if (Math.abs(newPos.x - expectedTargetX) < 1 && Math.abs(newPos.y - expectedTargetY) < 1) {
                                  console.log("Piece position updated. Re-clicking moved piece to show new targets.");
-                                 elementToReclick.click(); // Re-click to show new moves
+                                 elementToReclick.click();
                              } else {
-                                 // Position hasn't updated in the DOM *yet*, or the element reference is stale.
                                  console.warn(`Position check mismatch after move: Expected (${expectedTargetX}, ${expectedTargetY}), Found (${newPos.x}, ${newPos.y}). Re-clicking anyway.`);
-                                 // Try clicking - maybe it just updated? If not, harmless click on old spot.
                                  elementToReclick.click();
                              }
                          } else {
-                              // Style might be temporarily missing after move/animation. Still try re-click.
                              console.warn("Could not get position after move timeout (style missing?). Attempting re-click anyway.");
                              elementToReclick.click();
                          }
                     } else {
                         console.log("Stored piece element reference became invalid after move timeout. Cannot re-click.");
-                        // Don't deselect here automatically, user might have selected another piece already.
                     }
-                }, POST_MOVE_DELAY_MS); // Use the defined delay
+                }, POST_MOVE_DELAY_MS);
 
             } else {
-                console.log("No valid move target found at that position.");
+                 // Only log if we expected a target (i.e., not just a failed multi-move search)
+                 if (!isShiftPressed) {
+                     console.log("No valid move target found at that position.");
+                 }
+                 // No need to log failure again if multi-move already logged it
             }
         }
     }
@@ -216,23 +246,26 @@
 
     // --- Cleanup Function ---
     window.stopWASDControls = function() {
+        // ... (keep the previous stopWASDControls function)
         document.removeEventListener('click', handleUserClick, true);
         document.removeEventListener('keydown', handleKeyDown);
-        if (selectedPieceElement && selectedPieceElement.style) { // Check style exists before modifying
+        if (selectedPieceElement && selectedPieceElement.style) {
             selectedPieceElement.style.outline = 'none';
             selectedPieceElement.style.filter = '';
         }
         selectedPieceElement = null;
         lastClickedUserPieceElement = null;
         console.log("WASD Chess Controls stopped.");
-        try { // Add try-catch for edge cases where window obj might be weird
+        try {
              delete window.stopWASDControls;
         } catch (e) {
              console.warn("Could not delete stopWASDControls function from window.");
         }
     };
 
-    console.log(`WASD Controls Initialized (v0.4). Delay: ${POST_MOVE_DELAY_MS}ms. Click your black piece, press '${SELECT_KEY.toUpperCase()}' to select.`);
-    console.log("Use WASD to move selected piece. Run stopWASDControls() to disable.");
+    console.log(`WASD Controls Initialized (v0.5). Delay: ${POST_MOVE_DELAY_MS}ms.`);
+    console.log(`Click your black piece, press '${SELECT_KEY.toUpperCase()}' to select.`);
+    console.log("Use WASD for single moves, SHIFT+WASD for multi-moves (Queen/Rook/Bishop).");
+    console.log("Run stopWASDControls() to disable.");
 
 })();
