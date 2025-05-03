@@ -1,12 +1,14 @@
-// == UserScript ==
-// @name         One Million Chessboards - WASD Controls (Shift Multi-Move) for Your Pieces
+// ==UserScript==
+// @name         One Million Chessboards - WASD Controls (Your Pieces)
 // @namespace    http://tampermonkey.net/
 // @version      0.6
-// @description  WASD for single moves, Shift+WASD for multi-square moves (furthest valid) for YOUR assigned pieces (adapts to white/black). Detects user color.
-// @match        https://chess.eieio.games/*
-// @grant        none
+// @description  Adds WASD controls for single moves and Shift+WASD for multi-square moves (furthest valid) for YOUR assigned pieces on onemillionchessboards.com. Detects user color.
 // @author       AGI
-// ==/UserScript ==
+// @match        https://onemillionchessboards.com/*
+// @icon         https://www.google.com/s2/favicons?sz=64&domain=onemillionchessboards.com
+// @grant        none
+// @run-at       document-end
+// ==/UserScript==
 
 (function() {
     'use strict';
