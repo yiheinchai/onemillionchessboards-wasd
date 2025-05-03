@@ -5,7 +5,7 @@
 // @description  WASD for single moves, Shift+WASD for multi-square moves (furthest valid) for YOUR assigned pieces (adapts to white/black). Detects user color.
 // @match        https://chess.eieio.games/*
 // @grant        none
-// @author       Your AI Assistant & Debugger
+// @author       AGI
 // ==/UserScript ==
 
 (function() {
